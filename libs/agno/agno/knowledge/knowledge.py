@@ -39,8 +39,6 @@ class Knowledge:
         if self.document_store is not None:
             self.document_store.read_from_store = True
 
-    #
-
     def search(
         self, query: str, num_documents: Optional[int] = None, filters: Optional[Dict[str, Any]] = None
     ) -> List[Document]:
@@ -116,7 +114,8 @@ class Knowledge:
             # TODO: Need to implement this part. Copy only when the file does not already exist in that store.
             pass
 
-    def _add_document_by_path(self, id: str, document: DocumentV2):
+    def _add_document_from_path(self, id: str, document: DocumentV2):
+        log_info("Adding document from path")
         path = document.paths
         if isinstance(path, str):
             path = [path]
@@ -140,11 +139,19 @@ class Knowledge:
                     file_document = DocumentV2(
                         name=document.name, paths=str(file), metadata=document.metadata, reader=document.reader
                     )
-                    self._add_document_by_path(id, file_document)
+                    self._add_document_from_path(id, file_document)
             else:
                 raise ValueError(f"Invalid path: {path}")
 
-    def _add_document_by_content(self, id: str, document: DocumentV2):
+    def _add_document_from_url(self, id: str, document: DocumentV2):
+        log_info("Adding document from URL")
+        if document.urls:
+            for url in document.urls:
+                read_documents = self.url_reader.read(url, id, document.name)
+                self.vector_store.upsert(documents=read_documents, filters=document.metadata)
+                self._add_to_documents_db(id, document)
+
+    def _add_document_from_content(self, id: str, document: DocumentV2):
         log_info("Adding document from content")
 
         if document.content:
@@ -182,6 +189,7 @@ class Knowledge:
 
     def add_document(self, document: Union[str, DocumentV2]) -> None:
         log_debug("Adding document")
+        print(f"Document: {document}")
         # TODO: Update document ID handling
         if isinstance(document, DocumentV2) and document.id:
             id = document.id
@@ -190,30 +198,63 @@ class Knowledge:
 
         if isinstance(document, DocumentV2):
             if document.paths:
-                self._add_document_by_path(id, document)
+                self._add_document_from_path(id, document)
             elif document.urls:
-                self._add_from_url(document)
+                self._add_document_from_url(id, document)
             elif document.content:
-                self._add_document_by_content(id, document)
+                self._add_document_from_content(id, document)
             else:
                 raise ValueError("No document provided")
-        elif isinstance(document, str):
-            # Check if the string is a valid URL
-            parsed_url = urlparse(document)
-            if parsed_url.scheme and parsed_url.netloc:
-                # It's a valid URL, treat as URL document
-                url_document = DocumentV2(name=document, urls=[document])
-                self._add_from_url(url_document)
-            else:
-                # It's a file path, treat as file document
-                document = DocumentV2(name=document, paths=document)
-                self._add_document_by_path(id, document)
-        else:
-            raise ValueError("No document provided")
+
         # elif isinstance(document, str):
-        #     self._add_from_file(document)
-        # else:
-        #     raise ValueError("No document provided")
+        #     # Check if the string is a valid URL
+        #     parsed_url = urlparse(document)
+        #     if parsed_url.scheme and parsed_url.netloc:
+        #         # It's a valid URL, treat as URL document
+        #         url_document = DocumentV2(name=document, urls=[document])
+        #         self._add_from_url(id, url_document)
+        #     else:
+        #         # It's a file path, treat as file document
+        #         document = DocumentV2(name=document, paths=document)
+        #         self._add_document_by_path(id, document)
+
+    # @overload
+    # def add_documents_new(self, documents: List[DocumentV2]) -> None: ...
+    #
+    # @overload
+    # def add_documents_new(self, documents: DocumentV2) -> None: ...
+    #
+    # @overload
+    # def add_documents_new(self, documents: List[str]) -> None: ...
+
+    def add_document_new(
+        self,
+        document: Optional[DocumentV2],
+        path: Optional[str],
+        metadata: Optional[Dict[str, Any]],
+        reader: Optional[str],
+    ) -> None:
+        if document and path:
+            log_warning("Document and path both specified. Metadata will be overridden")
+
+    def add_documents_new(
+        self,
+        documents: Optional[Union[DocumentV2, List[DocumentV2]]] = None,
+        paths: Optional[Union[str, List[str]]] = None,
+    ) -> None:
+        #   From URL
+        #   From Path
+        #   From Document
+
+        if documents:
+            ...
+            # if document has paths
+            # if document has urls
+            # if document has content
+        if paths:
+            # if path is local/dir
+            ...
+            # if path is a url
 
     def add_documents(self, documents: Union[DocumentV2, List[DocumentV2]]) -> None:
         """
@@ -239,19 +280,29 @@ class Knowledge:
         )
         return document
 
-    def get_documents(self) -> List[DocumentV2]:
+    def get_documents(
+        self,
+        limit: Optional[int] = None,
+        page: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+    ) -> Tuple[List[DocumentV2], int]:
         if self.documents_db is None:
             raise ValueError("No documents db provided")
-        documents = self.documents_db.get_knowledge_documents()
+        documents, count = self.documents_db.get_knowledge_documents(
+            limit=limit, page=page, sort_by=sort_by, sort_order=sort_order
+        )
         # Convert database rows to DocumentV2 objects
+        print(f"Count: {count}")
         result = []
         for doc_row in documents:
+            print(f"Doc row: {doc_row}")
             # Create DocumentV2 from database row
             doc = DocumentV2(
                 id=doc_row.id, name=doc_row.name, description=doc_row.description, metadata=doc_row.metadata
             )
             result.append(doc)
-        return result
+        return result, count
 
     def remove_document(self, document_id: str):
         if self.documents_db is not None:
@@ -305,10 +356,6 @@ class Knowledge:
             pass
         else:
             raise ValueError(f"Invalid path: {path}")
-
-    def _add_from_url(self, url: str):
-        print("Add from URL not implemented yet")
-        pass
 
     def validate_filters(self, filters: Optional[Dict[str, Any]]) -> Tuple[Dict[str, Any], List[str]]:
         if not filters:

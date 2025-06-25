@@ -1044,6 +1044,24 @@ class PgVector(VectorDb):
             sess.rollback()
             return False
 
+    def delete_by_source_id(self, id: str) -> bool:
+        """
+        Delete documents by source ID.
+        """
+        from sqlalchemy import delete
+
+        try:
+            with self.Session() as sess, sess.begin():
+                stmt = self.table.delete().where(self.table.c.source_document_id == id)
+                sess.execute(stmt)
+                sess.commit()
+                log_info(f"Deleted records with source_document_id '{id}' from table '{self.table.fullname}'.")
+                return True
+        except Exception as e:
+            logger.error(f"Error deleting rows from table '{self.table.fullname}': {e}")
+            sess.rollback()
+            return False
+
     def __deepcopy__(self, memo):
         """
         Create a deep copy of the PgVector instance, handling unpickleable attributes.

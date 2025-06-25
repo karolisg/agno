@@ -14,11 +14,20 @@ knowledge = Knowledge(
 )
 
 # Add files to the knowledge base
+# knowledge.add_documents(
+#     DocumentV2(
+#         name="CV1",
+#         paths=["tmp/cv_1.pdf", "tmp/cv_2.pdf"],
+#         metadata={"user_tag": "Engineering candidates"},
+#     )
+# )
+
+# Add a URL to the knowledge base
 knowledge.add_documents(
     DocumentV2(
-        name="CV1",
-        paths=["tmp/cv_1.pdf", "tmp/cv_2.pdf"],
-        metadata={"user_tag": "Engineering candidates"},
+        name="URL1",
+        urls=["https://agno-public.s3.amazonaws.com/recipes/ThaiRecipes.pdf"],
+        metadata={"user_tag": "URLs"},
     )
 )
 
